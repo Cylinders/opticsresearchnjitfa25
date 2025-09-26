@@ -10,5 +10,5 @@ function [position] = linearmotion(time)
         position
     end
 
-    position = 0 + 1*time + randn; 
+    position = 0 + .1*time + 5*randn; 
 end

@@ -1,0 +1,5 @@
+
+timestep = 0:0.001:1; 
+sig = signal(0, timestep); 
+
+plot(sig, timestep)

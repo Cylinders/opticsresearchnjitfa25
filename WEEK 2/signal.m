@@ -10,6 +10,6 @@ arguments (Output)
     complex
 end
     k = 1;
-    complex = exp(r*i * k);
+    complex = times((0.1 * linearmotion(t) + randn), exp(linearmotion(t)*1i * k));
 
 end

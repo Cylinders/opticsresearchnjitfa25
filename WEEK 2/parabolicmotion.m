@@ -9,5 +9,5 @@ arguments (Output)
     position
 end
 
-    position = 0 + 1*(time)^2  + randn;
+    position = 0 + 1*(power(time, 2));
 end
