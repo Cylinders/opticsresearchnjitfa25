@@ -1,0 +1,47 @@
+%s(𝒓,𝑡)= 𝐴(𝒓) 𝑒^𝑗𝑘𝑧(𝑡)
+%𝛿𝜑=arg⁡(𝑠(𝒓,𝑡+𝛿𝑡))−arg⁡(𝑠(𝒓,𝑡))
+
+% Physical Parameters
+c = 3e8;              
+f = 24e9;             % Carrier frequency (Hz)
+lambda = c/f;         
+k = 2*pi/lambda;      
+
+% Simulation Parameters
+fs = 1000;            % Sampling frequency (Hz)
+t_duration = 2;       % sim time (s)
+t = 0:1/fs:t_duration; 
+A = 1;                
+
+z0 = 0;           
+v = 10; 
+z_linear = z0 + v*t;
+z = z_linear; 
+
+%s(𝒓,𝑡)= 𝐴(𝒓) 𝑒^𝑗𝑘𝑧(𝑡)
+s = A * exp(1j * k * z);
+
+phi = angle(s);
+
+delta_phi = unwrap(phi);
+delta_phi = diff(delta_phi); 
+
+
+% For linear motion:
+expected_delta_phi = k * v * (1/fs);
+disp(['Expected delta_phi for linear motion: ', num2str(expected_delta_phi)]);
+disp(['Simulated mean delta_phi: ', num2str(mean(delta_phi))]);
+
+figure;
+subplot(3,1,1);
+plot(t, z);
+title('Target Position z(t)');
+xlabel('Time (s)');
+ylabel('Position (m)');
+
+subplot(3,1,2);
+plot(t(1:end-1), delta_phi);
+title('Doppler Phase Shift \delta\phi');
+xlabel('Time (s)');
+ylabel('Phase Shift (rad)');
+
