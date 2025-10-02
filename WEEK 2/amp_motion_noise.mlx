@@ -1,0 +1,87 @@
+c = 3e8;             
+f = 24e9;             % Carrier frequency (24 GHz)
+lambda = c/f;         
+k = 2*pi/lambda;      
+
+fs = 1000;            % Sampling frequency (Hz)
+t_duration = 2;       % Simulation time (s)
+t = 0:1/fs:t_duration; % Time vector
+
+z0 = 0.1;             
+v = 5;               
+
+% Linear part of the motion
+z_linear = z0 + v*t;
+
+
+%low-frequency random noise using a filtered signal.
+motion_noise_magnitude = 0.001; % small random motion component
+%motion_noise_magnitude = 0.01;
+%motion_noise_magnitude = 1.0;
+
+[b,a] = butter(4, 10/(fs/2));  % 10 Hz low-pass filter
+Zn = motion_noise_magnitude * filter(b, a, randn(size(t)));
+
+%Z(t) = Z0 + vt + Zn(t)
+z = z_linear + Zn;
+
+A0 = 1; 
+
+% Amplitude noise: N(t)
+amplitude_noise_magnitude = 0.1;
+Nt = amplitude_noise_magnitude * randn(size(t));
+
+%A(r)=A0(r)+N(t)
+A = A0 + Nt;
+
+%s(t)=A(t)*exp(j*k*z(t))
+s = A .* exp(1j * k * z); 
+
+% Extract the phase information from the complex signal
+phi = angle(s);
+
+% Unwrap the phase to correct for 2*pi jumps
+unwrapped_phi = unwrap(phi);
+
+% Calculate the phase shift between consecutive samples
+delta_phi = diff(unwrapped_phi);
+
+% Calculate the theoretical phase shift for the constant velocity part
+expected_delta_phi_linear = k * v * (1/fs);
+disp('--- Verification ---');
+disp(['Expected delta_phi from linear motion: ', num2str(expected_delta_phi_linear)]);
+disp(['Simulated mean delta_phi: ', num2str(mean(delta_phi))]);
+disp('Note: The mean simulated value will be close to the expected value but will fluctuate due to the random motion component.');
+
+
+% PLOT 1: Target Position 
+figure('Name', 'Target Position');
+plot(t, z, 'b', t, z_linear, 'r--');
+title('Target Position z(t)');
+xlabel('Time (s)');
+ylabel('Position (m)');
+legend('Total Motion (with Zn)', 'Linear Motion');
+grid on;
+set(gca, 'FontSize', 12); 
+
+% PLOT 2: Signal Amplitude 
+figure('Name', 'Signal Amplitude');
+plot(t, A);
+title('Signal Amplitude A(t) with Noise');
+xlabel('Time (s)');
+ylabel('Amplitude');
+grid on;
+set(gca, 'FontSize', 12); 
+
+% PLOT 3: Doppler Phase Shift 
+figure('Name', 'Doppler Phase Shift');
+plot(t(1:end-1), delta_phi);
+hold on;
+yline(expected_delta_phi_linear, 'r--', 'LineWidth', 1.5);
+hold off;
+title('Doppler Phase Shift \delta\phi');
+xlabel('Time (s)');
+ylabel('Phase Shift (rad)');
+legend('Measured \delta\phi', 'Expected from Linear Motion');
+grid on;
+set(gca, 'FontSize', 12); 
