@@ -22,23 +22,64 @@ absorbtion_u = 5;
 amp0 = @(r) I0 * exp(-absorbtion_u * r);
 ampT = @(r) amp0(r) + continuous_amp_noise;
 % Linear Motion -----------------------------------------
-Z0 = 0;
-linearZ = @(t) Z0 + (velocity * t) + continuous_Z_noise;
+% Linear Motion -----------------------------------------
+motionType = 'ramp'; % options: 'linear','poly','sinusoidal','sawtooth','pulse','ramp'
 
+switch motionType
+    case 'linear'
+        Z = @(t) Z0 + velocity*t;
 
+    case 'poly'
+        % Quadratic with scaled coefficient so max vel ~ velocity
+        Z = @(t) Z0 + (velocity/(T))*t.^2;  
 
+    case 'sinusoidal'
+        % z(t) = A sin(ωt), choose ω and A so max vel ≈ velocity
+        f = 1e5; % Hz
+        A = velocity/(2*pi*f); 
+        Z = @(t) Z0 + A*sin(2*pi*f*t);
+
+    case 'sawtooth'
+        % Proper sawtooth: linear rise, sharp drop
+        f = 1e5; % Hz
+        A = velocity/(2*pi*f);
+        Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=1 → classic sawtooth
+
+    case 'pulse'
+        f = 1e5;
+        A = velocity/(2*pi*f);
+        Z = @(t) Z0 + A*square(2*pi*f*t);
+
+    case 'ramp'
+        % Symmetric triangular wave
+        f = 1e5;
+        A = velocity/(2*pi*f);
+        Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=0.5 → triangle
+end
+
+position = @(t) Z(t) + continuous_Z_noise;
 
 % Signal -----------------------------------------------
-signal = ampT(r) .* (exp(1i*waveNumber*linearZ(t)));
+signal = ampT(r) .* (exp(1i*waveNumber*position(t)));
 phase_info = imag(signal);
 intensity_info = real(signal);
 phase = angle(signal);
 dPdt = gradient(phase) ./ gradient(t);
-velocity_calc = dPdt / (waveNumber * cos(0));
+velocity_calc = dPdt / waveNumber;
+
 % Plots -----------------------------------------------
+figure;
 grid on;
 hold on;
+
+% ------------------ Position Info -------------------
+title(['Position vs. time (' motionType ')']);
+xlabel('time (s)');
+ylabel('Position');
+plot(t, position(t), 'b');
+xlim([0 T]); % ensure one full window
 % ---------------------- Signal Info -----------------
+
 %{
 title('Signal vs. time');
 xlabel('time(s)');
@@ -46,15 +87,15 @@ ylabel('Signal');
 %plot(t, intensity_info);
 %plot(t, phase_info);
 %}
-% ---------------------- Phase change ----------------
 
+% ---------------------- Phase change ----------------
+%{
 title('Phase vs. time');
 xlabel('time(s)');
 ylabel('Phase');
 plot (t, angle(signal));
-
+%}
 % ----------------------Velocity calculation ----------
-
 %{
 title('Velocity vs. time');
 xlabel('time(s)');
@@ -62,4 +103,3 @@ ylabel('Velocity');
 ylim([-velocity*6 velocity*6])
 plot(t, velocity_calc);
 %}
-
