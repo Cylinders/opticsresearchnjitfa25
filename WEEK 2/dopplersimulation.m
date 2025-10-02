@@ -1,49 +1,65 @@
-
-timestep = 0:0.001:2*pi; 
-sig = signal(0, timestep);
-
-phase_unwrapped = unwrap(angle(sig));
-
-
-phase_change = diff(phase_unwrapped);
-
-dt = timestep(2) - timestep(1);
-t_phase = (timestep(1:end-1) + timestep(2:end)) / 2;
-
-
-f_d_inst = phase_change ./ (2*pi*dt);    
-
-lambda = [];        
-f0 = 77e9;           
-
-c = 3e8;            
-
-if isempty(lambda)
-    lambda = c / f0;
-end
-
-
-velocity = (f_d_inst .* lambda) / 2;  
-
-
+% System spec -------------------------------------------
+velocity = 0.3;
+wavelength = 850e-9;
+waveNumber = (2 * pi) / wavelength;
+fs = (3e8) / wavelength; % Sampling frequency (Hz)
+   
+% Dependent Variables ------------------------------------
+T = 1e-5; % Total sampling time duration (seconds)
+dt = 1e-9;
+%r = 0:0.00001:0.1;
+r = 0; % fixed
+t = 0:dt:T;
+%t = 0; % fixed
+% Noise ---------------------------------------------
+noise_amplitude = 1e-3; % Adjust for desired noise strength
+continuous_amp_noise = noise_amplitude * randn(size(t));
+noiseZ_mag = 1e-10; %1e-10
+continuous_Z_noise = noiseZ_mag * randn(size(t));
+% Amplitude --------------------------------------------
+I0 = 2;
+absorbtion_u = 5;
+amp0 = @(r) I0 * exp(-absorbtion_u * r);
+ampT = @(r) amp0(r) + continuous_amp_noise;
+% Linear Motion -----------------------------------------
+Z0 = 0;
+linearZ = @(t) Z0 + (velocity * t) + continuous_Z_noise;
 
 
-figure('Name','Doppler & Velocity','NumberTitle','off','Position',[100 100 900 500]);
 
-subplot(2,1,1);
-plot(t_phase, f_d_inst, 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Doppler Shift f_D (Hz)');
-title('Instantaneous Doppler Frequency');
+
+% Signal -----------------------------------------------
+signal = ampT(r) .* (exp(1i*waveNumber*linearZ(t)));
+phase_info = imag(signal);
+intensity_info = real(signal);
+phase = angle(signal);
+dPdt = gradient(phase) ./ gradient(t);
+velocity_calc = dPdt / (waveNumber * cos(0));
+% Plots -----------------------------------------------
 grid on;
+hold on;
+% ---------------------- Signal Info -----------------
+%{
+title('Signal vs. time');
+xlabel('time(s)');
+ylabel('Signal');
+%plot(t, intensity_info);
+%plot(t, phase_info);
+%}
+% ---------------------- Phase change ----------------
 
-subplot(2,1,2);
-plot(t_phase, velocity, 'LineWidth', 1.5);
-xlabel('Time (s)');
-ylabel('Radial Velocity v (m/s)');
-title(['Estimated Radial Velocity ( \lambda = ' num2str(lambda) ' m )']);
-grid on;
+title('Phase vs. time');
+xlabel('time(s)');
+ylabel('Phase');
+plot (t, angle(signal));
 
+% ----------------------Velocity calculation ----------
 
-fprintf('Doppler frequency (Hz): mean = %.3f, std = %.3f\n', mean(f_d_inst), std(f_d_inst));
-disp(mean(velocity))
+%{
+title('Velocity vs. time');
+xlabel('time(s)');
+ylabel('Velocity');
+ylim([-velocity*6 velocity*6])
+plot(t, velocity_calc);
+%}
+
