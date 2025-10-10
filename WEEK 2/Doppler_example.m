@@ -1,6 +1,6 @@
 %
 % clear;
-% load('matlab_mirror_.15_40_.25.mat');
+load('matlab_mirror_.15_40_.25.mat');
 im_data_pro=im_data;% 3D measurement
 
 %% determine x,y modulation and obtain M-OCPM image 

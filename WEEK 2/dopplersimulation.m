@@ -2,7 +2,7 @@
 velocity = 0.3;
 wavelength = 850e-9;
 waveNumber = (2 * pi) / wavelength;
-fs = (3e8) / wavelength; % Sampling frequency (Hz)
+fs = (3e7) / wavelength; % Sampling frequency (Hz)
    
 % Dependent Variables ------------------------------------
 T = 1e-5; % Total sampling time duration (seconds)
@@ -23,16 +23,27 @@ amp0 = @(r) I0 * exp(-absorbtion_u * r);
 ampT = @(r) amp0(r) + continuous_amp_noise;
 % Linear Motion -----------------------------------------
 % Linear Motion -----------------------------------------
-motionType = 'ramp'; % options: 'linear','poly','sinusoidal','sawtooth','pulse','ramp'
-
+motionType = 'cubic';
+Z0 = 0
 switch motionType
     case 'linear'
         Z = @(t) Z0 + velocity*t;
 
-    case 'poly'
-        % Quadratic with scaled coefficient so max vel ~ velocity
-        Z = @(t) Z0 + (velocity/(T))*t.^2;  
-
+    case 'quadratic'
+        % Degree 2 polynomial
+        Z = @(t) Z0 + 10 * (velocity/(2*T^(1))) * t.^2;
+        
+    case 'cubic'
+        % Degree 3 polynomial
+        Z = @(t) Z0 + 25*(velocity/(3*T^(2))) * t.^3;
+        
+    case 'quartic'
+        % Degree 4 polynomial
+        Z = @(t) Z0 + 10*(velocity/(4*T^(3))) * t.^4;
+        
+    case 'quintic'
+        % Degree 5 polynomial
+        Z = @(t) Z0 + 10*(velocity/(5*T^(4))) * t.^5;
     case 'sinusoidal'
         % z(t) = A sin(ωt), choose ω and A so max vel ≈ velocity
         f = 1e5; % Hz
@@ -60,11 +71,44 @@ end
 position = @(t) Z(t) + continuous_Z_noise;
 
 % Signal -----------------------------------------------
-signal = ampT(r) .* (exp(1i*waveNumber*position(t)));
-phase_info = imag(signal);
-intensity_info = real(signal);
-phase = angle(signal);
-dPdt = gradient(phase) ./ gradient(t);
+signal = ampT(r) .* (exp(1i*waveNumber*position(t)));% pulse_train = (1/(round(T/dt))+1) * (mod(0:dt:T, 2) <= 1e-4);
+pulse_train = 1 * (mod(0:dt:T, 2) <= 1e-5);
+% Convolve with the rectangular sampling function
+% convSignal = conv(signal, rec, 'same');
+
+
+window_width_sec = 1e-9; 
+
+window_width_samples = round(window_width_sec / dt);
+
+averaging_window = ones(1, window_width_samples) / window_width_samples;
+
+averaged_position = conv(signal, averaging_window, 'same');
+
+
+convSignal = signal .* pulse_train
+
+window_width_sec = 1e-3;
+window_width_samples = round(window_width_sec / dt);
+averaging_window = ones(1, window_width_samples) / window_width_samples;
+
+averaged_position = conv(signal, averaging_window, 'same');
+% % 
+% phase_info = imag(signal);
+% intensity_info = real(signal);
+% phase = angle(signal);
+
+% 
+% phase_info = imag(convSignal);
+% intensity_info = real(convSignal);
+% phase = angle(convSignal);
+
+
+
+
+phase = unwrap(angle(averaged_position));
+
+dPdt = gradient(phase, dt);
 velocity_calc = dPdt / waveNumber;
 
 % Plots -----------------------------------------------
@@ -73,33 +117,35 @@ grid on;
 hold on;
 
 % ------------------ Position Info -------------------
-title(['Position vs. time (' motionType ')']);
-xlabel('time (s)');
-ylabel('Position');
-plot(t, position(t), 'b');
-xlim([0 T]); % ensure one full window
+% title(['Position vs. time (' motionType ')']);
+% xlabel('time (s)');
+% ylabel('Position');
+% plot(t, position(t), 'b');
+% xlim([0 T]); % ensure one full window
+
+
+
 % ---------------------- Signal Info -----------------
 
-%{
-title('Signal vs. time');
-xlabel('time(s)');
-ylabel('Signal');
-%plot(t, intensity_info);
-%plot(t, phase_info);
-%}
+
+% title('Signal vs. time');
+% xlabel('time(s)');
+% ylabel('Signal');
+% %plot(t, intensity_info);
+% plot(t, phase_info);
+% 
 
 % ---------------------- Phase change ----------------
-%{
-title('Phase vs. time');
-xlabel('time(s)');
-ylabel('Phase');
-plot (t, angle(signal));
-%}
+
+% title('Phase vs. time');
+% xlabel('time(s)');
+% ylabel('Phase');
+% plot (t, angle(signal));
+
 % ----------------------Velocity calculation ----------
-%{
-title('Velocity vs. time');
-xlabel('time(s)');
-ylabel('Velocity');
-ylim([-velocity*6 velocity*6])
-plot(t, velocity_calc);
-%}
+% 
+% title('Velocity vs. time');
+% xlabel('time(s)');
+% ylabel('Velocity');
+% ylim([-velocity*6 velocity*6])
+% plot(t, velocity_calc);

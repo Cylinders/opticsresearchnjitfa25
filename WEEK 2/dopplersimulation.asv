@@ -2,11 +2,11 @@
 velocity = 0.3;
 wavelength = 850e-9;
 waveNumber = (2 * pi) / wavelength;
-fs = (3e8) / wavelength; % Sampling frequency (Hz)
+fs = (3e7) / wavelength; % Sampling frequency (Hz)
    
 % Dependent Variables ------------------------------------
 T = 1e-5; % Total sampling time duration (seconds)
-dt = 1e-9;
+dt = 1e-7;
 %r = 0:0.00001:0.1;
 r = 0; % fixed
 t = 0:dt:T;
@@ -22,26 +22,39 @@ absorbtion_u = 5;
 amp0 = @(r) I0 * exp(-absorbtion_u * r);
 ampT = @(r) amp0(r) + continuous_amp_noise;
 % Linear Motion -----------------------------------------
-motionType = 'linear'; % options: 'linear','poly','sinusoidal','sawtooth','pulse','ramp'
-
+% Linear Motion -----------------------------------------
+motionType = 'cubic';
+Z0 = 0
 switch motionType
     case 'linear'
         Z = @(t) Z0 + velocity*t;
 
-    case 'poly'
-        % Quadratic with scaled coefficient so max vel ~ velocity
-        Z = @(t) Z0 + (velocity/(T))*t.^2;  
-
+    case 'quadratic'
+        % Degree 2 polynomial
+        Z = @(t) Z0 + 10 * (velocity/(2*T^(1))) * t.^2;
+        
+    case 'cubic'
+        % Degree 3 polynomial
+        Z = @(t) Z0 + 25*(velocity/(3*T^(2))) * t.^3;
+        
+    case 'quartic'
+        % Degree 4 polynomial
+        Z = @(t) Z0 + 10*(velocity/(4*T^(3))) * t.^4;
+        
+    case 'quintic'
+        % Degree 5 polynomial
+        Z = @(t) Z0 + 10*(velocity/(5*T^(4))) * t.^5;
     case 'sinusoidal'
         % z(t) = A sin(ωt), choose ω and A so max vel ≈ velocity
-        f = 1e5; % Hz, adjust frequency
+        f = 1e5; % Hz
         A = velocity/(2*pi*f); 
         Z = @(t) Z0 + A*sin(2*pi*f*t);
 
     case 'sawtooth'
-        f = 1e5;
+        % Proper sawtooth: linear rise, sharp drop
+        f = 1e5; % Hz
         A = velocity/(2*pi*f);
-        Z = @(t) Z0 + A*sawtooth(2*pi*f*t);
+        Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=1 → classic sawtooth
 
     case 'pulse'
         f = 1e5;
@@ -49,52 +62,75 @@ switch motionType
         Z = @(t) Z0 + A*square(2*pi*f*t);
 
     case 'ramp'
-        % Triangular wave, slope adjusted to match velocity
+        % Symmetric triangular wave
         f = 1e5;
         A = velocity/(2*pi*f);
-        Z = @(t) Z0 + A*abs(sawtooth(2*pi*f*t));
+        Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=0.5 → triangle
 end
 
-linearZ = @(t) Z(t) + continuous_Z_noise;
-
+position = @(t) Z(t) + continuous_Z_noise;
 
 % Signal -----------------------------------------------
-signal = ampT(r) .* (exp(1i*waveNumber*linearZ(t)));
-phase_info = imag(signal);
-intensity_info = real(signal);
-phase = angle(signal);
+signal = ampT(r) .* (exp(1i*waveNumber*position(t)));
+% Time vector
+disp(T/dt)
+rec = (1/(round(T/dt))+1) * ones(1, (round(T/dt))+1)
+
+% Convolve with the rectangular sampling function
+convSignal = conv(signal, rec, 'same');
+
+
+
+% % 
+% phase_info = imag(signal);
+% intensity_info = real(signal);
+% phase = angle(signal);
+
+
+phase_info = imag(convSignal);
+intensity_info = real(convSignal);
+phase = angle(convSignal);
+
+
+
 dPdt = gradient(phase) ./ gradient(t);
 velocity_calc = dPdt / waveNumber;
+
 % Plots -----------------------------------------------
+figure;
 grid on;
 hold on;
 
-% ---------------------- Position Info 
+% ------------------ Position Info -------------------
+% title(['Position vs. time (' motionType ')']);
+% xlabel('time (s)');
+% ylabel('Position');
+% plot(t, position(t), 'b');
+% xlim([0 T]); % ensure one full window
 
 
 
 % ---------------------- Signal Info -----------------
 
-%{
-title('Signal vs. time');
-xlabel('time(s)');
-ylabel('Signal');
-%plot(t, intensity_info);
-%plot(t, phase_info);
-%}
+% 
+% title('Signal vs. time');
+% xlabel('time(s)');
+% ylabel('Signal');
+% %plot(t, intensity_info);
+% plot(t, phase_info);
+
 
 % ---------------------- Phase change ----------------
-%{
-title('Phase vs. time');
-xlabel('time(s)');
-ylabel('Phase');
-plot (t, angle(signal));
-%}
+
+% title('Phase vs. time');
+% xlabel('time(s)');
+% ylabel('Phase');
+% plot (t, angle(signal));
+
 % ----------------------Velocity calculation ----------
-%{
+
 title('Velocity vs. time');
 xlabel('time(s)');
 ylabel('Velocity');
 ylim([-velocity*6 velocity*6])
 plot(t, velocity_calc);
-%}
