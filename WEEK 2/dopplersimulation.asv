@@ -6,9 +6,9 @@ fs = (3e7) / wavelength; % Sampling frequency (Hz)
    
 % Dependent Variables ------------------------------------
 T = 1e-5; % Total sampling time duration (seconds)
-dt = 1e-7;
-%r = 0:0.00001:0.1;
-r = 0; % fixed
+dt = 1e-9;
+r = 0:0.00001:0.1;
+%r = 0; % fixed
 t = 0:dt:T;
 %t = 0; % fixed
 % Noise ---------------------------------------------
@@ -21,9 +21,8 @@ I0 = 2;
 absorbtion_u = 5;
 amp0 = @(r) I0 * exp(-absorbtion_u * r);
 ampT = @(r) amp0(r) + continuous_amp_noise;
-% Linear Motion -----------------------------------------
-% Linear Motion -----------------------------------------
-motionType = 'cubic';
+
+motionType = 'quadratic';
 Z0 = 0
 switch motionType
     case 'linear'
@@ -72,28 +71,55 @@ position = @(t) Z(t) + continuous_Z_noise;
 
 % Signal -----------------------------------------------
 signal = ampT(r) .* (exp(1i*waveNumber*position(t)));
-% Time vector
-disp(T/dt)
-rec = (1/(round(T/dt))+1) * ones(1, (round(T/dt))+1)
-
+% pulse_train = (1/(round(T/dt))+1) * (mod(0:dt:T, 2) <= 1e-4);
+pulse_train = 1 * (mod(0:dt:T, 2) <= 1e-5);
 % Convolve with the rectangular sampling function
-convSignal = conv(signal, rec, 'same');
+%convSignal = ifft(conv(fft(signal), fft(ones(1,round(T/dt))), 'same'));
+convSignal = ifftfft(signal) .* fft(ones(1,round(T/dt)+1));
+
+% window_width_sec = 1e-9; 
+% 
+% window_width_samples = round(window_width_sec / dt);
+% 
+% averaging_window = ones(1, window_width_samples) / window_width_samples;
+% 
+% averaged_position = conv(signal, averaging_window, 'same');
 
 
+%convSignal = signal .* pulse_train
+
+% window_width_sec = 1e-5;
+% window_width_samples = round(window_width_sec / dt);
+% averaging_window = ones(1, window_width_samples) / window_width_samples;
+% 
+% averaged_position = conv(signal, averaging_window, 'same');
+% 
+% time = 0:dt:T; 
+% convSignal= cumtrapz(signal, time);
 
 % % 
 % phase_info = imag(signal);
 % intensity_info = real(signal);
 % phase = angle(signal);
 
-
+% % 
 phase_info = imag(convSignal);
 intensity_info = real(convSignal);
 phase = angle(convSignal);
 
 
+%phase_info = imag(averaged_position);
+%intensity_info = real(averaged_position);
+%phase = angle(averaged_position);
 
-dPdt = gradient(phase) ./ gradient(t);
+%phase_info = imag(averaged_position);
+%intensity_info = real(averaged_position);
+%phase = angle(averaged_position);
+
+
+%phase = unwrap(angle(averaged_position));
+
+dPdt = gradient(phase, dt);
 velocity_calc = dPdt / waveNumber;
 
 % Plots -----------------------------------------------
@@ -112,7 +138,7 @@ hold on;
 
 % ---------------------- Signal Info -----------------
 
-% 
+
 % title('Signal vs. time');
 % xlabel('time(s)');
 % ylabel('Signal');
@@ -121,16 +147,52 @@ hold on;
 
 
 % ---------------------- Phase change ----------------
-
+% 
 % title('Phase vs. time');
 % xlabel('time(s)');
 % ylabel('Phase');
 % plot (t, angle(signal));
 
 % ----------------------Velocity calculation ----------
+% 
+% title('Velocity vs. time');
+% xlabel('time(s)');
+% ylabel('Velocity');
+% ylim([-velocity*6 velocity*6])
+% plot(t, velocity_calc);
 
-title('Velocity vs. time');
-xlabel('time(s)');
-ylabel('Velocity');
-ylim([-velocity*6 velocity*6])
+
+figure; % Open a new figure window
+
+% ------------------ 1. Position vs. Time -------------------
+subplot(2,2,1); % Top-left
+plot(t, position(t), 'b');
+title(['Position vs. Time (' motionType ')']);
+xlabel('Time (s)');
+ylabel('Position');
+xlim([0 T]);
+
+% ------------------ 2. Signal vs. Time ---------------------
+subplot(2,2,2); % Top-right
+plot(t, phase_info); % or intensity_info if desired
+title('Signal vs. Time');
+xlabel('Time (s)');
+ylabel('Signal');
+
+% ------------------ 3. Phase vs. Time ----------------------
+subplot(2,2,3); % Bottom-left
+plot(t, angle(signal));
+title('Phase vs. Time');
+xlabel('Time (s)');
+ylabel('Phase');
+
+% ------------------ 4. Velocity vs. Time -------------------
+subplot(2,2,4); % Bottom-right
 plot(t, velocity_calc);
+title('Velocity vs. Time');
+xlabel('Time (s)');
+ylabel('Velocity');
+ylim([-velocity*6 velocity*6]);
+
+% ------------------ Optional Formatting -------------------
+sgtitle('Motion and Signal Analysis'); % Add a global title for all subplots
