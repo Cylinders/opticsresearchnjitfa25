@@ -7,8 +7,8 @@ fs = (3e7) / wavelength; % Sampling frequency (Hz)
 % Dependent Variables ------------------------------------
 T = 1e-5; % Total sampling time duration (seconds)
 dt = 1e-9;
-r = 0:0.00001:0.1;
-%r = 0; % fixed
+%r = 0:0.00001:0.1;
+r = 0; % fixed
 t = 0:dt:T;
 %t = 0; % fixed
 % Noise ---------------------------------------------
@@ -30,7 +30,7 @@ switch motionType
 
     case 'quadratic'
         % Degree 2 polynomial
-        Z = @(t) Z0 + 10 * (velocity/(2*T^(1))) * t.^2;
+        Z = @(t) Z0 + 50 * (velocity/(2*T^(1))) * t.^2;
         
     case 'cubic'
         % Degree 3 polynomial
@@ -51,7 +51,7 @@ switch motionType
 
     case 'sawtooth'
         % Proper sawtooth: linear rise, sharp drop
-        f = 1e5; % Hz
+        f = 1e6; % Hz
         A = velocity/(2*pi*f);
         Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=1 → classic sawtooth
 
@@ -62,7 +62,7 @@ switch motionType
 
     case 'ramp'
         % Symmetric triangular wave
-        f = 1e5;
+        f = 1e6;
         A = velocity/(2*pi*f);
         Z = @(t) Z0 + A*sawtooth(2*pi*f*t); % width=0.5 → triangle
 end
@@ -71,128 +71,102 @@ position = @(t) Z(t) + continuous_Z_noise;
 
 % Signal -----------------------------------------------
 signal = ampT(r) .* (exp(1i*waveNumber*position(t)));
-% pulse_train = (1/(round(T/dt))+1) * (mod(0:dt:T, 2) <= 1e-4);
+
+
+
 pulse_train = 1 * (mod(0:dt:T, 2) <= 1e-5);
-% Convolve with the rectangular sampling function
-%convSignal = ifft(conv(fft(signal), fft(ones(1,round(T/dt))), 'same'));
-convSignal = ifftfft(signal) .* fft(ones(1,round(T/dt)+1));
-
-% window_width_sec = 1e-9; 
-% 
-% window_width_samples = round(window_width_sec / dt);
-% 
-% averaging_window = ones(1, window_width_samples) / window_width_samples;
-% 
-% averaged_position = conv(signal, averaging_window, 'same');
 
 
-%convSignal = signal .* pulse_train
 
-% window_width_sec = 1e-5;
-% window_width_samples = round(window_width_sec / dt);
-% averaging_window = ones(1, window_width_samples) / window_width_samples;
-% 
-% averaged_position = conv(signal, averaging_window, 'same');
-% 
-% time = 0:dt:T; 
-% convSignal= cumtrapz(signal, time);
+% convSignal = conv(signal, pulse_train, 'same')
+rectWindow = ones(T/dt +)
+convSignal = ifft(fft(signal) .* sinc(t));
 
-% % 
-% phase_info = imag(signal);
-% intensity_info = real(signal);
-% phase = angle(signal);
 
-% % 
+
+ 
+% Extract real, imaginary, and phase components
 phase_info = imag(convSignal);
 intensity_info = real(convSignal);
 phase = angle(convSignal);
 
-
-%phase_info = imag(averaged_position);
-%intensity_info = real(averaged_position);
-%phase = angle(averaged_position);
-
-%phase_info = imag(averaged_position);
-%intensity_info = real(averaged_position);
-%phase = angle(averaged_position);
-
-
-%phase = unwrap(angle(averaged_position));
-
 dPdt = gradient(phase, dt);
 velocity_calc = dPdt / waveNumber;
 
-% Plots -----------------------------------------------
+% Assuming original signal variables exist:
+% signal, position(t), etc.
+orig_phase_info = imag(signal);
+orig_intensity_info = real(signal);
+orig_phase = angle(signal);
+orig_dPdt = gradient(orig_phase, dt);
+orig_velocity_calc = orig_dPdt / waveNumber;
+
+% -------------------- PLOTTING --------------------
 figure;
+sgtitle('Signal Comparison: Original vs Convolved');
 grid on;
 hold on;
 
-% ------------------ Position Info -------------------
-% title(['Position vs. time (' motionType ')']);
-% xlabel('time (s)');
-% ylabel('Position');
-% plot(t, position(t), 'b');
-% xlim([0 T]); % ensure one full window
-
-
-
-% ---------------------- Signal Info -----------------
-
-
-% title('Signal vs. time');
-% xlabel('time(s)');
-% ylabel('Signal');
-% %plot(t, intensity_info);
-% plot(t, phase_info);
-
-
-% ---------------------- Phase change ----------------
-% 
-% title('Phase vs. time');
-% xlabel('time(s)');
-% ylabel('Phase');
-% plot (t, angle(signal));
-
-% ----------------------Velocity calculation ----------
-% 
-% title('Velocity vs. time');
-% xlabel('time(s)');
-% ylabel('Velocity');
-% ylim([-velocity*6 velocity*6])
-% plot(t, velocity_calc);
-
-
-figure; % Open a new figure window
-
 % ------------------ 1. Position vs. Time -------------------
-subplot(2,2,1); % Top-left
+subplot(4,2,1); % Row 1, Col 1
 plot(t, position(t), 'b');
 title(['Position vs. Time (' motionType ')']);
 xlabel('Time (s)');
 ylabel('Position');
 xlim([0 T]);
 
-% ------------------ 2. Signal vs. Time ---------------------
-subplot(2,2,2); % Top-right
-plot(t, phase_info); % or intensity_info if desired
-title('Signal vs. Time');
+% ------------------ 2. Position (duplicate for alignment) --
+subplot(4,2,2); % Row 1, Col 2
+plot(t, position(t), 'b');
+title(['Position vs. Time (' motionType ')']);
+xlabel('Time (s)');
+ylabel('Position');
+xlim([0 T]);
+
+% ------------------ 3. Original Signal ---------------------
+subplot(4,2,3); % Row 2, Col 1
+plot(t, orig_intensity_info);
+title('Original Signal vs. Time');
 xlabel('Time (s)');
 ylabel('Signal');
 
-% ------------------ 3. Phase vs. Time ----------------------
-subplot(2,2,3); % Bottom-left
-plot(t, angle(signal));
-title('Phase vs. Time');
+% ------------------ 4. Convolved Signal --------------------
+subplot(4,2,4); % Row 2, Col 2
+plot(t, intensity_info);
+title('Convolved Signal vs. Time');
+xlabel('Time (s)');
+ylabel('Signal');
+
+% ------------------ 5. Original Phase ----------------------
+subplot(4,2,5); % Row 3, Col 1
+plot(t, orig_phase);
+title('Original Phase vs. Time');
 xlabel('Time (s)');
 ylabel('Phase');
 
-% ------------------ 4. Velocity vs. Time -------------------
-subplot(2,2,4); % Bottom-right
-plot(t, velocity_calc);
-title('Velocity vs. Time');
+% ------------------ 6. Convolved Phase ---------------------
+subplot(4,2,6); % Row 3, Col 2
+plot(t, phase);
+title('Convolved Phase vs. Time');
+xlabel('Time (s)');
+ylabel('Phase');
+
+% ------------------ 7. Original Velocity -------------------
+subplot(4,2,7); % Row 4, Col 1
+plot(t, orig_velocity_calc);
+title('Original Velocity vs. Time');
 xlabel('Time (s)');
 ylabel('Velocity');
 ylim([-velocity*6 velocity*6]);
+
+% ------------------ 8. Convolved Velocity ------------------
+subplot(4,2,8); % Row 4, Col 2
+plot(t, velocity_calc);
+title('Convolved Velocity vs. Time');
+xlabel('Time (s)');
+ylabel('Velocity');
+ylim([-velocity*6 velocity*6]);
+
 
 % ------------------ Optional Formatting -------------------
 sgtitle('Motion and Signal Analysis'); % Add a global title for all subplots

@@ -15,7 +15,7 @@ N0=4;[max_fft,peak_index]=max(data1d(N0:N_window/2))
 data3d_fd=ifft(im_data_pro(:,:,1:N_window),N_window,3);
 
 data_3d_plane=data3d_fd(:,:,peak_index+N0-1);
-data_3d_plane_fd=fft2(data_3d_plane,1024,1024);
+data_3d_plane_fd=fft2(data_3d_plane,1024,1024); 
 
 im_int_fd_y=fft(data_3d_plane,1024,1);
 Y_1d=mean(abs(im_int_fd_y'));
