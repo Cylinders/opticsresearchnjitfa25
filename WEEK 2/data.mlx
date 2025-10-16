@@ -1,0 +1,121 @@
+clear; clc;
+
+% System parameters
+velocity = 0.3;
+wavelength = 850e-9;
+waveNumber = (2 * pi) / wavelength;
+fs = (3e7) / wavelength;
+
+% Motion selection
+motionType = 'ramp'; 
+
+% Test ranges
+dt_values = [1e-9, 5e-9, 1e-8, 5e-8];
+%dt_values = 1e-9 : 1e-9 : 1e-7;
+window_widths = [16, 32, 100, 1000];
+
+% Fixed simulation parameters
+T = 1e-5;
+Z0 = 0;
+noise_amplitude = 1e-3;
+noiseZ_mag = 1e-10;
+I0 = 2;
+absorbtion_u = 5;
+r_position = 0;
+
+% Result storage
+results = {};
+
+runNum = 1;
+
+for dt = dt_values
+    t = 0:dt:T;
+    
+    % Define nonlinear component Zn(t)
+    switch motionType
+        case 'linear'
+            Zn = @(t) 0*t;
+        case 'quadratic'
+            Zn = @(t) (velocity/T) * t.^2;
+        case 'cubic'
+            Zn = @(t) (velocity/T^2) * t.^3;
+        case 'quartic'
+            Zn = @(t) (velocity/T^3) * t.^4;
+        case 'quintic'
+            Zn = @(t) (velocity/T^4) * t.^5;
+        case 'sinusoidal'
+            f = 1e5;
+            A = velocity/(2*pi*f);
+            Zn = @(t) A * sin(2*pi*f*t);
+        case 'sawtooth'
+            f = 1e6;
+            A = velocity/(2*pi*f);
+            Zn = @(t) A * sawtooth(2*pi*f*t);
+        case 'pulse'
+            f = 1e5;
+            A = velocity/(2*pi*f);
+            Zn = @(t) A * square(2*pi*f*t);
+        case 'ramp'
+            f = 1e6;
+            A = velocity/(2*pi*f);
+            Zn = @(t) A * sawtooth(2*pi*f*t);
+        otherwise
+            error('Unknown motion type');
+    end
+
+    % Noise
+    continuous_amp_noise = noise_amplitude * randn(size(t));
+    continuous_Z_noise = noiseZ_mag * randn(size(t));
+
+    % Amplitude
+    amp0 = I0 * exp(-absorbtion_u * r_position);
+    ampT = amp0 + continuous_amp_noise;
+
+    % Total position
+    position = Z0 + velocity*t + Zn(t) + continuous_Z_noise;
+
+    % Generate signal
+    signal = ampT .* exp(1i*waveNumber*position);
+
+    % Original (ideal) phase and velocity
+    orig_phase = unwrap(angle(signal));
+    orig_dPdt = gradient(orig_phase, dt);
+    orig_velocity_calc = orig_dPdt / waveNumber;
+
+    % Ground truth (no noise in derivative)
+    true_velocity = velocity + gradient(Zn(t), dt);
+
+    for windowWidth = window_widths
+        % Rectangular convolution
+        rectWindow = ones(1, windowWidth) / windowWidth;
+        convSignal = conv(signal, rectWindow, 'same');
+
+        % Phase and velocity from convolved signal
+        phase = unwrap(angle(convSignal));
+        dPdt = gradient(phase, dt);
+        velocity_calc = dPdt / waveNumber;
+
+        % Error metrics
+        error_ideal = orig_velocity_calc - true_velocity;
+        error_conv = velocity_calc - true_velocity;
+
+        rms_ideal = rms(error_ideal);
+        rms_conv = rms(error_conv);
+        error_increase = 100 * (rms_conv - rms_ideal) / rms_ideal;
+
+        % Store results
+        results(end+1, :) = {runNum, motionType, dt, windowWidth, ...
+                             rms_ideal, rms_conv, error_increase};
+        runNum = runNum + 1;
+    end
+end
+
+% Convert to table
+resultsTable = cell2table(results, ...
+    'VariableNames', {'Run', 'Motion_Type', 'dt', 'Window_Width', ...
+                      'RMS_Error_Ideal_Sampling', 'RMS_Error_Rect_Sampling', 'Error_Increase_Percent'});
+
+disp(resultsTable);
+
+writetable(resultsTable, ['Results_' motionType '.csv']);
+
