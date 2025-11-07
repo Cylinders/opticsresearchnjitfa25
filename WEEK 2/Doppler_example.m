@@ -6,7 +6,7 @@ im_data_pro=im_data;% 3D measurement
 %% determine x,y modulation and obtain M-OCPM image 
 % The method was described in detail in the following paper
 %X. Liu, R. Bhakta, E. Kryvorutsky et al., "Imaging cells and nanoparticles using modulated optically 
-% computed phase microscopy," Scientific Reports 15, 3157 (2025).
+% computed phase microscopy," Scientific Reports 15, 3157 (2025).z
 peak_index=4;N0=4;
 size0=size(im_data_pro);
 N_window=size0(3);
