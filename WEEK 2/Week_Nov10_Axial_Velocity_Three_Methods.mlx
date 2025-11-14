@@ -1,0 +1,189 @@
+clear
+load('matlab_motion_.5v_5_1.mat');
+
+N_size=1024;
+x=zeros(N_size);x0=1:1:N_size;
+for i=1:1:N_size
+    x(:,i)=x0;
+end
+y=x';
+
+data_input=im_data;
+N_window=256;
+data1d=abs(fft(permute(data_input(512,512,1:N_window),[3 1 2])));
+figure
+plot(data1d(3:64))
+title('FFT of Signal at (512, 512)')
+N0=4;[max_fft,peak_index]=max(data1d(N0:N_window/2));
+
+data3d_fd=ifft(data_input(:,:,1+N_window*0:N_window*1),N_window,3);
+
+roi_top=128;roi_bottom=1024-128;
+roi_left=128;roi_right=1024-128;
+
+N_interval = 10; 
+data3d_fd_half=data3d_fd;
+data3d_fd_half(:,:,1:2)=0;data3d_fd_half(:,:,N_window/2+1:N_window)=0;
+data3d_fd_half=circshift(data3d_fd_half,[0 0 -(peak_index+N0-1-1)]);
+data3d_fd_half=fft(data3d_fd_half,[],3);
+data_doppler_3D=angle(data3d_fd_half(:,:,1+N_interval:N_window).*conj(data3d_fd_half(:,:,1:N_window-N_interval)));
+
+% Phase unwrapping
+data_doppler_3D(data_doppler_3D>0.9*pi)=data_doppler_3D(data_doppler_3D>0.9*pi)-pi;
+data_doppler_3D(data_doppler_3D<-0.9*pi)=data_doppler_3D(data_doppler_3D<-0.9*pi)+pi;
+
+% Parameters
+N_pzt = 19;        % For PZT signal generation
+dt = 0.2;          
+
+% METHOD 1: Doppler phase shift between two data points at t and t+Nδt
+% v = λ/(4πn NΔt) * Δφ
+
+phi_method1 = permute(data_doppler_3D(330,527,:), [3 1 2]);
+phi_method1 = unwrap(phi_method1);
+v_method1 = phi_method1 * 455 / (1.33 * 4 * pi * N_interval * dt);
+
+% METHOD 2: Doppler phase shift between multiple pairs of two data points
+% (Multi-pair averaged Doppler velocity)
+
+complex_pixel_data = permute(data3d_fd_half(330,527,:), [3 1 2]);
+L = length(complex_pixel_data);
+
+maxStart = L - 2*N_interval;
+v_method2 = zeros(maxStart,1);
+
+for t0 = 1:maxStart
+    phi_i = zeros(N_interval,1);
+    for i = 0:N_interval-1
+        s1 = complex_pixel_data(t0 + i);
+        s2 = complex_pixel_data(t0 + i + N_interval);
+        phi_i(i+1) = angle(s2 * conj(s1));
+    end
+    phi_avg = mean(phi_i);
+    v_method2(t0) = phi_avg * 455 / (1.33 * 4*pi * N_interval * dt);
+end
+
+v_method2 = unwrap(v_method2);
+
+% METHOD 3: Doppler phase shift between a pairs of averaged complex measurement
+% s1 = mean of N samples
+% s2 = mean of next N samples
+% v = λ/(4πn NΔt) * (angle(s2) - angle(s1))
+
+v_method3 = zeros(maxStart,1);
+
+for t0 = 1:maxStart
+    s1_block = complex_pixel_data(t0 : t0+N_interval-1);
+    s2_block = complex_pixel_data(t0+N_interval : t0+2*N_interval-1);
+    
+    s1_avg = mean(s1_block);
+    s2_avg = mean(s2_block);
+    
+    dphi = angle(s2_avg * conj(s1_avg));
+    v_method3(t0) = dphi * 455 / (1.33 * 4*pi * N_interval * dt);
+end
+
+v_method3 = unwrap(v_method3);
+
+%Ideal PZT Signal
+d_const = [];
+for i=1:floor(length(v_method1)/(2*N_pzt))
+    for j=1:N_pzt
+        d_const((i-1)*2*N_pzt + j) = 1;
+        d_const((i-1)*2*N_pzt + N_pzt + j) = -1;
+    end
+end
+idealSig = circshift(0.5*1000*(d_const)*2.8/75,6);
+
+t1 = (1:length(v_method1)) * dt;
+t2 = (1:length(v_method2)) * dt;
+t3 = (1:length(v_method3)) * dt;
+tPZT = (1:length(idealSig)) * dt;
+
+% Figure 1: Method 1 vs PZT
+figure;
+minLen1_plot = min(length(v_method1), length(idealSig));
+plot(t1(1:minLen1_plot), v_method1(1:minLen1_plot), 'DisplayName', 'Method 1 (Original)');
+hold on
+plot(tPZT(1:minLen1_plot), idealSig(1:minLen1_plot), 'k--', 'LineWidth', 2, 'DisplayName', 'PZT Ground Truth');
+hold off
+title('Method 1: Direct Phase Difference Between Two Points')
+ylabel('velocity (nm/s)')
+xlabel('time (s)')
+%legend('show', 'Location', 'northwest')
+grid on
+
+%% Figure 2: Method 2 vs PZT
+figure;
+minLen2_plot = min(length(v_method2), length(idealSig));
+plot(t2(1:minLen2_plot), v_method2(1:minLen2_plot), 'r-', 'LineWidth', 2, 'DisplayName', 'Method 2 (Vel. Avg)');
+hold on
+plot(tPZT(1:minLen2_plot), idealSig(1:minLen2_plot), 'k--', 'LineWidth', 2, 'DisplayName', 'PZT Ground Truth');
+hold off
+title('Method 2: Average of Multiple Velocity Estimates')
+ylabel('velocity (nm/s)')
+xlabel('time (s)')
+%legend('show', 'Location', 'northwest')
+grid on
+
+% Figure 3: Method 3 vs PZT
+figure;
+minLen3_plot = min(length(v_method3), length(idealSig));
+plot(t3(1:minLen3_plot), v_method3(1:minLen3_plot), 'color', [0.9290 0.6940 0.1250], 'LineWidth', 2, 'DisplayName', 'Method 3 (Complex Avg)');
+hold on
+plot(tPZT(1:minLen3_plot), idealSig(1:minLen3_plot), 'k--', 'LineWidth', 2, 'DisplayName', 'PZT Ground Truth');
+hold off
+title('Method 3: Velocity from Averaged Complex Signals')
+ylabel('velocity (nm/s)')
+xlabel('time (s)')
+%legend('show', 'Location', 'northwest')
+grid on
+
+fprintf('N_interval: %d\n', N_interval);
+
+% Analysis for Method 1
+minLen1 = min(length(v_method1), length(idealSig));
+transpose_v1 = transpose(v_method1);
+squared_errors_1 = (idealSig(1:minLen1) - transpose_v1(1:minLen1)).^2;
+mean_squared_error_1 = mean(squared_errors_1);
+rmse_1 = sqrt(mean_squared_error_1);
+errors_1 = idealSig(1:minLen1) - transpose_v1(1:minLen1);
+mae_1 = mean(abs(errors_1));
+R_matrix_1 = corrcoef(idealSig(1:minLen1), transpose_v1(1:minLen1));
+correlation_1 = R_matrix_1(1, 2);
+
+% Analysis for Method 2 (Velocity Avg)
+minLen2 = min(length(v_method2), length(idealSig));
+transpose_v2 = transpose(v_method2);
+valid_indices_2 = ~isnan(transpose_v2(1:minLen2));
+squared_errors_2 = (idealSig(valid_indices_2) - transpose_v2(valid_indices_2)).^2;
+mean_squared_error_2 = mean(squared_errors_2);
+rmse_2 = sqrt(mean_squared_error_2);
+errors_2 = idealSig(valid_indices_2) - transpose_v2(valid_indices_2);
+mae_2 = mean(abs(errors_2));
+R_matrix_2 = corrcoef(idealSig(valid_indices_2), transpose_v2(valid_indices_2));
+correlation_2 = R_matrix_2(1, 2);
+
+% Analysis for Method 3 (Complex Avg)
+minLen3 = min(length(v_method3), length(idealSig));
+transpose_v3 = transpose(v_method3);
+valid_indices_3 = ~isnan(transpose_v3(1:minLen3));
+squared_errors_3 = (idealSig(valid_indices_3) - transpose_v3(valid_indices_3)).^2;
+mean_squared_error_3 = mean(squared_errors_3);
+rmse_3 = sqrt(mean_squared_error_3);
+errors_3 = idealSig(valid_indices_3) - transpose_v3(valid_indices_3);
+mae_3 = mean(abs(errors_3));
+R_matrix_3 = corrcoef(idealSig(valid_indices_3), transpose_v3(valid_indices_3));
+correlation_3 = R_matrix_3(1, 2);
+
+fprintf('\n\n--- Final Summary Table ---\n\n');
+
+Methods = {'Method 1 (Original)'; 'Method 2 (Vel. Avg)'; 'Method 3 (Complex Avg)'};
+
+RMSE = [rmse_1; rmse_2; rmse_3];
+MAE = [mae_1; mae_2; mae_3];
+Correlation = [correlation_1; correlation_2; correlation_3];
+
+Summary_Table = table(RMSE, MAE, Correlation, 'RowNames', Methods);
+
+disp(Summary_Table);
